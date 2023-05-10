@@ -17,6 +17,9 @@ set(SOURCES
 )
 
 set(TEST_SOURCES
+    src/err.c
+    src/mem.c
+    src/queue.c
     src/test/test.c
 )
 

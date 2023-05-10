@@ -2,6 +2,11 @@
 #undef NDEBUG
 #endif
 
+#include "../mem.h"
+#include "../queue.h"
+
+#include <string.h>
+#include <stdlib.h>
 #include <stdbool.h>
 #include <stdio.h>
 
@@ -15,17 +20,85 @@ do {                                         \
     }                                        \
 } while (0)
 
+#define BS_DATA_LEN 512
+
 typedef struct {
     const char * const name;
     bool (*run)(void);
 } test_t;
 
-static bool test_true() {
+typedef struct {
+    char data[BS_DATA_LEN + 1];
+} big_struct;
+
+static char* repeat(const char c, const size_t n) {
+    char* str = checked_malloc(n + 1);
+    memset(str, c, n);
+    str[n] = '\0';
+    return str;
+}
+
+static bool test_queue_small_items_push_then_pop() {
+    const size_t nreps = 100000;
+    Queue q;
+    queue_init(&q, sizeof(int));
+    CHECK(queue_empty(&q));
+
+    for (size_t i = 0; i < nreps; ++i) {
+        queue_push_back(&q, &i);
+        int* front = queue_front(&q);
+        CHECK(0 == *front);
+    }
+
+    for (size_t i = 0; i < nreps; ++i) {
+        int* front = queue_front(&q);
+        CHECK(i == *front);
+        queue_pop_front(&q);
+    }
+
+    CHECK(queue_empty(&q));
+    queue_destroy(&q);
     return true;
 }
 
+static bool test_queue_big_items_push_then_pop() {
+    const int nreps = 26;
+    Queue q;
+    queue_init(&q, sizeof(big_struct));
+    CHECK(queue_empty(&q));
+
+    char* expected_front = repeat('a', BS_DATA_LEN);
+    for (int i = 0; i < nreps; ++i) {
+        big_struct bs;
+        memset(bs.data, 'a' + i, BS_DATA_LEN);
+        bs.data[BS_DATA_LEN] = 0;
+
+        queue_push_back(&q, &bs);
+
+        big_struct* front = queue_front(&q);
+        CHECK(0 == strncmp(expected_front, front->data, BS_DATA_LEN));
+    }
+    free(expected_front);
+
+    for (int i = 0; i < nreps; ++i) {
+        big_struct* front = queue_front(&q);
+
+        expected_front = repeat('a' + i, BS_DATA_LEN);
+        CHECK(0 == strncmp(expected_front, front->data, BS_DATA_LEN));
+        free(expected_front);
+
+        queue_pop_front(&q);
+    }
+    CHECK(queue_empty(&q));
+    queue_destroy(&q);
+    return true;
+}
+
+//TODO: a test for pushes and pops intertwined
+
 static const test_t tests[] = {
-    TEST(test_true),
+    TEST(test_queue_small_items_push_then_pop),
+    TEST(test_queue_big_items_push_then_pop),
 };
 
 int main(void) {
