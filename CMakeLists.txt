@@ -12,7 +12,9 @@ set(SOURCES
     src/util.c
     src/err.c
     src/mem.c
+    src/queue.c
     src/reader.c
+    src/analyzer.c
     src/tracker.c
 )
 
