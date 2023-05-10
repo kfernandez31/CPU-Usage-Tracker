@@ -3,6 +3,7 @@
 #include "queue.h"
 #include "reader.h"
 #include "analyzer.h"
+#include "printer.h"
 #include "pthread_util.h"
 
 #include <assert.h>
@@ -10,7 +11,8 @@
 
 #define READER                  0
 #define ANALYZER                1
-#define NUM_WORKERS             2
+#define PRINTER                 2
+#define NUM_WORKERS             3
 
 #define ATOMIC_PUSH_BACK(worker, item)                                 \
 do {                                                                   \
@@ -42,6 +44,7 @@ typedef struct {
     WorkerCtx* next;
 } SharedWorkerCtx;
 
+typedef SharedWorkerCtx PrinterCtx;
 typedef SharedWorkerCtx AnalyzerCtx;
 
 volatile sig_atomic_t running = true;
@@ -82,6 +85,16 @@ static void destroy_analyzer_ctx(AnalyzerCtx * const ctx) {
     free(ctx);
 }
 
+static void destroy_printer_ctx(PrinterCtx * const ctx) {
+    while (!queue_empty(&ctx->self.job_queue)) {
+        CpuUsage usage = *(CpuUsage*)queue_front(&ctx->self.job_queue);
+        free_usage(usage);
+        queue_pop_front(&ctx->self.job_queue);
+    }
+    destroy_worker_ctx(&ctx->self);
+    free(ctx);
+}
+
 static bool should_continue_work(WorkerCtx * const self) {
     if (queue_empty(&self->job_queue))
         self->wait = true;
@@ -110,7 +123,8 @@ static void* reader_work(void* arg) {
 }
 
 static void* analyzer_work(void* arg) {
-    WorkerCtx* self = &((AnalyzerCtx*)arg)->self;
+    WorkerCtx* self    = &((AnalyzerCtx*)arg)->self;
+    WorkerCtx* printer = ((AnalyzerCtx*)arg)->next;
     fprintf(stderr, "[Analyzer] starting work!\n");
 
     while (running) {
@@ -125,10 +139,32 @@ static void* analyzer_work(void* arg) {
 
         CpuUsage usage = get_usage(samples);
         fprintf(stderr, "[Analyzer] gathered new usage info\n");
-        free_usage(usage);
+        ATOMIC_PUSH_BACK(printer, &usage);
     }
 
+    ORDER_TERMINATION(printer);
     fprintf(stderr, "[Analyzer] shutting down...\n");
+    return NULL;
+}
+
+static void* printer_work(void* arg) {
+    WorkerCtx* self = &((PrinterCtx*)arg)->self;
+    fprintf(stderr, "[Printer] starting work!\n");
+
+    while (running) {
+        mtx_lock(&self->mtx);
+        if (!should_continue_work(self))
+            break;
+        fprintf(stderr, "[Printer] woke up, resuming work\n");
+        assert(!queue_empty(&self->job_queue));
+        CpuUsage usage = *(CpuUsage*)queue_front(&self->job_queue);
+        queue_pop_front(&self->job_queue);
+        mtx_unlock(&self->mtx);
+        print_usage(usage);
+        fprintf(stderr, "[Printer] printed usage info\n");
+    }
+
+    fprintf(stderr, "[Printer] shutting down...\n");
     return NULL;
 }
 
@@ -142,17 +178,21 @@ int main(void) {
     sa.sa_flags = 0;
     sigaction(SIGTERM, &sa, NULL);
 
-    AnalyzerCtx* analyzer_ctx = new_shared_worker_ctx(sizeof(CpuDataSample*), NULL);
+    PrinterCtx* printer_ctx   = new_shared_worker_ctx(sizeof(CpuUsage), NULL);
+    AnalyzerCtx* analyzer_ctx = new_shared_worker_ctx(sizeof(CpuDataSample*), &printer_ctx->self);
     
     pthread_t workers[NUM_WORKERS];
+    thr_spawn(workers + PRINTER, printer_work, printer_ctx);
     thr_spawn(workers + ANALYZER, analyzer_work, analyzer_ctx);
     thr_spawn(workers + READER, reader_work, analyzer_ctx);
 
     thr_join(workers[READER], NULL);
     thr_join(workers[ANALYZER], NULL);
+    thr_join(workers[PRINTER], NULL);
 
     // the workers' queues might not be empty at this point, so we need to drain them
     // the following lines will do just that, and a bit more
+    destroy_printer_ctx(printer_ctx);
     destroy_analyzer_ctx(analyzer_ctx);
 
     fprintf(stderr, "[Main] shutting down...\n");

@@ -4,6 +4,9 @@
 
 #include "../mem.h"
 #include "../queue.h"
+#include "../reader.h"
+#include "../analyzer.h"
+#include "../printer.h"
 
 #include <string.h>
 #include <stdlib.h>
@@ -96,9 +99,23 @@ static bool test_queue_big_items_push_then_pop() {
 
 //TODO: a test for pushes and pops intertwined
 
+// Yes, this is an integration test without unit tests for the underlying functions. 
+// But just how are you going to test whether get_samples returns somethign of sense? 
+// You'd just print it and look at it. Same can be said for get_usage, 
+// so might as well combine them all together.
+static bool test_get_samples_get_data_print_data() {
+#ifdef __linux__
+    CpuDataSample* samples = get_samples();
+    CpuUsage usage = get_usage(samples);
+    print_usage(usage);
+#endif /* __linux__ */
+    return true;
+}
+
 static const test_t tests[] = {
     TEST(test_queue_small_items_push_then_pop),
     TEST(test_queue_big_items_push_then_pop),
+    TEST(test_get_samples_get_data_print_data),
 };
 
 int main(void) {

@@ -15,13 +15,18 @@ set(SOURCES
     src/queue.c
     src/reader.c
     src/analyzer.c
+    src/printer.c
     src/tracker.c
 )
 
 set(TEST_SOURCES
     src/err.c
+    src/util.c
     src/mem.c
     src/queue.c
+    src/reader.c
+    src/analyzer.c
+    src/printer.c
     src/test/test.c
 )
 
