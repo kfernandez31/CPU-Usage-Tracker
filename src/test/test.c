@@ -7,6 +7,7 @@
 #include "../reader.h"
 #include "../analyzer.h"
 #include "../printer.h"
+#include "../logger.h"
 
 #include <string.h>
 #include <stdlib.h>
@@ -15,12 +16,12 @@
 
 #define SIZE(x) (sizeof (x) / sizeof (x)[0])
 #define TEST(t) {#t, t}
-#define CHECK(x)                             \
-do {                                         \
-    if (!(x)) {                              \
-        fprintf(stderr, "%s was false", #x); \
-        return false;                        \
-    }                                        \
+#define CHECK(x)                       \
+do {                                   \
+    if (!(x)) {                        \
+        log_error("%s was false", #x); \
+        return false;                  \
+    }                                  \
 } while (0)
 
 #define BS_DATA_LEN 512
@@ -119,19 +120,23 @@ static const test_t tests[] = {
 };
 
 int main(void) {
+    logger_init(false);
+
     bool OK = true;
     for (size_t i = 0; i < SIZE(tests); ++i) {
         bool run = tests[i].run();
         if (run)
-            fprintf(stderr, "test %s: OK\n", tests[i].name);
+            log_info("test %s: OK", tests[i].name);
         else
-            fprintf(stderr, "test %s: FAIL\n", tests[i].name);
+            log_error("test %s: FAIL", tests[i].name);
         OK &= run;
     }
 
     if (OK)
-        fprintf(stderr, "All tests passed\n");
+        log_info("All tests passed");
     else
-        fprintf(stderr, "Tests failed\n");
-    return 0;
+        log_error("Tests failed");
+
+    logger_destroy();
+    return !OK;
 }

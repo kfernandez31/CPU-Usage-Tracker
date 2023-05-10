@@ -9,13 +9,14 @@ if(CMAKE_C_COMPILER_ID MATCHES "(GNU|Clang)")
 endif()
 
 set(SOURCES
-    src/util.c
     src/err.c
+    src/util.c
     src/mem.c
     src/queue.c
     src/reader.c
     src/analyzer.c
     src/printer.c
+    src/logger.c
     src/tracker.c
 )
 
@@ -27,6 +28,7 @@ set(TEST_SOURCES
     src/reader.c
     src/analyzer.c
     src/printer.c
+    src/logger.c
     src/test/test.c
 )
 
